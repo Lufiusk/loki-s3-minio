@@ -1,0 +1,78 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: debug
+  grpc_server_max_concurrent_streams: 1000
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+table_manager:
+  # The retention period must be a multiple of the index / chunks
+  # table "period" (see period_config).
+  retention_deletes_enabled: true
+  # This is 15 weeks retention, based on the 168h (1week) period durations used in the rest of the examples.
+  retention_period: 2520h
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+limits_config:
+  metric_aggregation_enabled: true
+  volume_enabled: true
+  discover_log_levels: true
+
+storage_config:
+  aws:
+    endpoint: minio:9000
+    insecure: true
+    bucketnames: loki
+    access_key_id: loki
+    secret_access_key: lokisecretpass
+    s3forcepathstyle: true
+  tsdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/index_cache
+    cache_ttl: 24h         # Can be increased for faster performance over longer query periods, uses more disk space
+
+schema_config:
+  configs:
+    - from: 2020-07-01
+      store: tsdb
+      object_store: s3
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+pattern_ingester:
+  enabled: true
+  metric_aggregation:
+    loki_address: localhost:3100
+
+frontend:
+  encoding: protobuf
+
+# By default, Loki will send anonymous, but uniquely-identifiable usage and configuration
+# analytics to Grafana Labs. These statistics are sent to https://stats.grafana.org/
+#
+# Statistics help us better understand how Loki is used, and they show us performance
+# levels for most users. This helps us prioritize features and documentation.
+# For more information on what's sent, look at
+# https://github.com/grafana/loki/blob/main/pkg/analytics/stats.go
+# Refer to the buildReport method to see what goes into a report.
+#
+# If you would like to disable reporting, uncomment the following lines:
+analytics:
+  reporting_enabled: false

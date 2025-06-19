@@ -1,0 +1,85 @@
+services:
+  minio:
+    container_name: minio-loki
+    image: bitnami/minio:2025.4.8-debian-12-r3
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=loki
+      - MINIO_ROOT_PASSWORD=lokisecretpass
+      - MINIO_DEFAULT_BUCKETS=loki
+    volumes:
+      - "s3-data:/bitnami/minio/data"
+      - "s3-config:/etc/default/"
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  loki:
+    image: grafana/loki:3.5.1
+    container_name: loki
+    ports:
+      - 3100:3100
+    volumes:
+      - ./loki:/mnt/config
+    restart: always
+    command: -config.file=/mnt/config/loki-config.yaml
+    links:
+      - minio:minio
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - monitoring
+
+  promtail:
+    image:  grafana/promtail:3.5.1
+    container_name: promtail
+    volumes:
+      - ./loki:/mnt/config
+      - /var/log:/var/log:ro
+    restart: always
+    environment:
+      - HOSTNAME=${HOSTNAME:-no-host}
+      - STAND=${STAND:-monitoring}
+    command: 
+     - -config.file=/mnt/config/promtail-config.yaml
+     - -config.expand-env=true
+    depends_on:
+      - loki
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:12.0.1
+    container_name: grafana
+    restart: always
+    depends_on:
+      - loki
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-1234567890}
+      - GF_USERS_ALLOW_SIGN_UP=${GF_USERS_ALLOW_SIGN_UP:-false}
+      - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+    ports:
+      - 3000:3000
+    networks:
+      - monitoring
+
+networks:
+  monitoring: null
+
+volumes:
+  s3-data: null
+  s3-config: null
+  grafana-data: null
